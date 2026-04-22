@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Gateway – Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1d27;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; }
+    header span { color: #7c83fd; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2em 0.65em;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge-pending    { background: #2d3148; color: #a0aec0; }
+    .badge-confirming { background: #2c3a5a; color: #63b3ed; }
+    .badge-paid       { background: #1a3a2a; color: #68d391; }
+    .badge-expired    { background: #3a2020; color: #fc8181; }
+    .badge-overpaid   { background: #3a3020; color: #f6ad55; }
+
+    .badge-trc20 { background: #2d3148; color: #e2b714; }
+    .badge-bep20 { background: #2d3148; color: #f7931a; }
+
+    main { padding: 2rem; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+    }
+
+    .stat-card .label { font-size: 0.8rem; color: #a0aec0; margin-bottom: 0.4rem; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #2d3148;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      color: #a0aec0;
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid #2d3148;
+    }
+    tbody tr { border-bottom: 1px solid #1e2235; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #1e2235; }
+    tbody td { padding: 0.75rem 1rem; vertical-align: middle; }
+
+    .mono { font-family: "JetBrains Mono", "Fira Mono", monospace; font-size: 0.8rem; }
+    .truncate { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .empty-state { padding: 3rem; text-align: center; color: #4a5568; }
+    .empty-state svg { margin-bottom: 1rem; }
+
+    @media (max-width: 768px) {
+      .hide-mobile { display: none; }
+      main { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7c83fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+  </svg>
+  <h1>Crypto Gateway <span>Dashboard</span></h1>
+</header>
+
+<main>
+
+  <!-- Summary stats -->
+  {% set total      = payments | length %}
+  {% set paid_count = payments | selectattr('status.value', 'equalto', 'paid')    | list | length %}
+  {% set pend_count = payments | selectattr('status.value', 'equalto', 'pending') | list | length %}
+  {% set exp_count  = payments | selectattr('status.value', 'equalto', 'expired') | list | length %}
+  {% set total_received = payments | selectattr('status.value', 'in', ['paid', 'overpaid'])
+                          | map(attribute='amount_received') | map('float') | sum %}
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="label">Total Invoices</div>
+      <div class="value">{{ total }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Paid</div>
+      <div class="value" style="color:#68d391">{{ paid_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Pending</div>
+      <div class="value" style="color:#a0aec0">{{ pend_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Expired</div>
+      <div class="value" style="color:#fc8181">{{ exp_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">USDT Received</div>
+      <div class="value" style="color:#68d391">{{ "%.2f"|format(total_received) }}</div>
+    </div>
+  </div>
+
+  <!-- Payments table -->
+  <div class="card">
+    <div class="card-header">Recent Payments (last 200)</div>
+
+    {% if payments %}
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Network</th>
+            <th>Address</th>
+            <th>Expected</th>
+            <th>Received</th>
+            <th>Status</th>
+            <th class="hide-mobile">TX Hash</th>
+            <th class="hide-mobile">Confs</th>
+            <th class="hide-mobile">Expires</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payments %}
+          <tr>
+            <td class="mono">{{ p.order_id }}</td>
+            <td>
+              {% if p.network.value == 'trc20' %}
+                <span class="badge badge-trc20">TRC-20</span>
+              {% else %}
+                <span class="badge badge-bep20">BEP-20</span>
+              {% endif %}
+            </td>
+            <td class="mono truncate" title="{{ p.address }}">{{ p.address }}</td>
+            <td class="mono">{{ "%.4f"|format(p.amount_expected|float) }}</td>
+            <td class="mono">{{ "%.4f"|format(p.amount_received|float) }}</td>
+            <td>
+              <span class="badge badge-{{ p.status.value }}">{{ p.status.value }}</span>
+            </td>
+            <td class="mono truncate hide-mobile" title="{{ p.tx_hash or '' }}">
+              {{ p.tx_hash or '—' }}
+            </td>
+            <td class="hide-mobile">{{ p.confirmations }}</td>
+            <td class="hide-mobile" style="font-size:0.78rem;color:#a0aec0">
+              {{ p.expires_at.strftime('%Y-%m-%d %H:%M') if p.expires_at else '—' }}
+            </td>
+            <td style="font-size:0.78rem;color:#a0aec0">
+              {{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '—' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      <p>No payment invoices yet. Create one via the API.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</main>
+
+</body>
+</html>
